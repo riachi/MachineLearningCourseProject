@@ -1,0 +1,152 @@
+---
+title: "MachineLearningCourseProject"
+author: "JFR"
+date: "June 26, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###Loading packages used
+```{r}
+library(caret)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+```
+
+
+Read the training and the testing data and check the dimensions of each.
+
+The code below requires manual download of the data:
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+```{r}
+setwd("~/Machine Learning/Course Project")
+pml_training <- read.csv("pml-training.csv")
+pml_testing <- read.csv("pml-testing.csv")
+```
+
+##Exploring the Data
+```{r}
+dim(pml_training)
+dim(pml_testing)
+summary(pml_training$classe)
+```
+
+pml-training has 19622 observations of 160 variables and pml-testing set has 20 observations of 160 variables.
+The data will be be used to predict the manner of exercise or the 'classe' variable which is split into 'A', 'B', 'C', 'D', and 'E' factors.
+
+
+##Partitioning our data
+```{r}
+set.seed(303)
+inTrain = createDataPartition(pml_training$classe, p = .6)[[1]]
+training = pml_training[ inTrain,]
+testing = pml_training[-inTrain,]
+```
+
+##Exploring and Cleaing the training data
+Find out how many of the varaibles have many missing values
+```{r}
+hist(colSums(is.na(training)))
+```
+
+From the plot we notice that all variables either have a high ratio of NA values or a very low one. We therefore remove all variables with a high NA ratio from the training set
+```{r}
+NAcount <- as.vector(colSums(is.na(training)))
+NAindex <- NAcount > 10000
+training <- training[,NAindex == FALSE]
+```
+
+With 93 variables reamining we will check for near zero variables or variables with very little variability that will not be useful for prediction.
+
+```{r}
+nrzero <- nearZeroVar(training, saveMetrics = TRUE)
+table(nrzero$nzv)
+```
+
+34 of the remaining variables are classified as near zero variables and we remove them from our data as well.
+
+```{r}
+training <- training[,nrzero$nzv == FALSE]
+```
+
+We will also remove the first 5 variables as they are not variables to build prediction models upon given that they are:
+- the index 'x'
+- 'user_name'
+- timestamps 'raw_timestamp_part_1' and 'raw_timestamp_part_2' and 'cvtd_timestamp'
+
+```{r}
+training <- training[,6:59]
+```
+
+We are left with 54 variables upon which we will build our prediction model.
+
+##Preprocessing
+
+To determine the extent that the variables are correlated with each other we plot them on a correlation plot
+
+```{r}
+cordf <- cor(training[,-54])
+corrplot(cordf, type = "lower", tl.cex = 0.6)
+```
+
+The darker colors indicate which variables are highly correlated. Since these are few we will not conduct any further preprocessing on out data.
+
+##Prediciton
+
+```{r}
+set.seed(313)
+```
+
+###Decision Trees
+```{r}
+modtree <- rpart(classe~., data = training, method = "class")
+
+predtree <- predict(modtree, testing, type = "class")
+
+confusionMatrix(testing$classe, predtree)
+```
+To plot the tree execute fancyRpartPlot(modtree). Plot not shown here due to size.
+
+
+###Random Forests
+```{r}
+modrf <- randomForest(classe~., data = training)
+
+predrf <- predict(modrf, testing)
+
+confusionMatrix(testing$classe, predrf)
+```
+
+The accuracy of the model built using the random forest has an accuracy of 99.62% as opposed to 72.19% accuracy of the decision trees method.
+
+We will therefore use the random forest model to predict our 20 data points from the pml_testing data that will be submitted.
+
+```{r}
+predrf <- predict(modrf, pml_testing)
+predrf
+```
+
+##Citation
+
+Data downloaded from the following source:
+
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6. 
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz4Cfvudt92
+
+
+
